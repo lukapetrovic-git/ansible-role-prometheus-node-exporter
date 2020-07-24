@@ -1,0 +1,62 @@
+---
+- name: Download node-exporter
+  get_url:
+    url: "{{ node_exporter_url }}"
+    dest: /tmp/node-exporter.tar.gz
+
+- name: Unarchive node-exporter
+  unarchive:
+    src: /tmp/node-exporter.tar.gz
+    dest: /home/{{ansible_user}}
+    remote_src: yes
+
+- name: Copy node-exporter
+  copy:
+    src: /home/{{ansible_user}}/node_exporter-1.0.1.linux-amd64/node_exporter
+    dest: /usr/local/bin/node_exporter
+    mode: '0755'
+    remote_src: yes
+
+- name: Template node_exporter.service
+  template:
+    src: node_exporter.service
+    dest: /etc/systemd/system/node_exporter.service
+
+- name: Start node_exporter service
+  service:
+    name: node_exporter
+    state: started
+    enabled: yes
+
+- name: Accept 9100 from localhost
+  iptables:
+    chain: INPUT
+    protocol: tcp
+    source: localhost
+    destination_port: '9100'
+    jump: ACCEPT
+
+- name: Accept 9100 from Prometheus Server
+  iptables:
+    chain: INPUT
+    protocol: tcp
+    source: "{{ prometheus_server }}"
+    destination_port: '9100'
+    jump: ACCEPT
+
+- name: Drop 9100 from anywhere else
+  iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_port: '9100'
+    jump: DROP
+
+- name: Install Iptables-persistent
+  apt:
+    name: iptables-persistent
+    state: present
+    update_cache: yes
+
+- name: Save iptable rules
+  shell:
+    cmd: iptables-save > /etc/iptables/rules.v4
